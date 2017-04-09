@@ -159,7 +159,10 @@ func runCreate(o Options) int {
 	if len(o.Content) > 0 {
 		content = strings.NewReader(o.Content)
 	}
-
+	if content == nil {
+		fmt.Println("Please set your content.")
+		return 1
+	}
 	// Create a user gist.
 	token := os.Getenv(githubToken)
 	if token == "" && o.Anon {
@@ -176,6 +179,10 @@ func runCreate(o Options) int {
 
 func runShow(o Options) int {
 	gist := getGist(o.Show)
+	if gist.ID == "" {
+		fmt.Println("Wrong ID.")
+		return 1
+	}
 	printGist(gist)
 	return 0
 }
@@ -194,6 +201,10 @@ func runEdit(o Options) int {
 	var content []byte
 	var filename string
 	gist := getGist(o.Edit)
+	if gist.ID == "" {
+		fmt.Println("Wrong gist ID / Non existant gist / No writes to W/R")
+		return 1
+	}
 	for f, gf := range gist.Files {
 		content = []byte(gf.Content)
 		filename = string(f)
