@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	colour "github.com/fatih/color"
 	flag "github.com/spf13/pflag"
 	"io"
 	"io/ioutil"
@@ -125,8 +126,13 @@ func getGists(tkn string) []*Gist {
 }
 
 func printGist(gist *Gist) {
+	colour.Set(colour.FgYellow)
 	fmt.Printf("ID: %s\n", gist.ID)
-	fmt.Printf("URL: %s\n", gist.HTMLURL)
+	colour.Unset()
+	fmt.Print("URL: ")
+	colour.Set(colour.Underline)
+	fmt.Println(gist.HTMLURL)
+	colour.Unset()
 	fmt.Printf("Date: %s\n\n", gist.UpdatedAt)
 	if gist.Description != "" {
 		fmt.Println(gist.Description)
