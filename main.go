@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 const (
@@ -29,13 +30,16 @@ type Options struct {
 	Content string
 	Show    string
 	Edit    string
+	List    bool
 }
 
 type Gist struct {
+	ID          string                    `json:"id,omitempty"`
 	Description string                    `json:"description,omitempty"`
 	Public      bool                      `json:"public,omitempty"`
 	Files       map[GistFilename]GistFile `json:"files,omitempty"`
 	HTMLURL     string                    `json:"html_url,omitempty"`
+	UpdatedAt   time.Time                 `json:"updated_at,omitempty"`
 }
 
 type GistFilename string
@@ -103,8 +107,34 @@ func getGist(id string) *Gist {
 	return &gist
 }
 
+func getGists(tkn string) []*Gist {
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", base, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	req.Header.Add("Authorization", "Token "+tkn)
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
+	gists := []*Gist{}
+	json.NewDecoder(resp.Body).Decode(&gists)
+	return gists
+}
+
 func printGist(gist *Gist) {
-	fmt.Println(gist.HTMLURL)
+	fmt.Printf("ID: %s\n", gist.ID)
+	fmt.Printf("URL: %s\n", gist.HTMLURL)
+	fmt.Printf("Date: %s\n\n", gist.UpdatedAt)
+	if gist.Description != "" {
+		fmt.Println(gist.Description)
+	}
+	for filename, _ := range gist.Files {
+		fmt.Println(filename)
+	}
+	fmt.Println()
 }
 
 func runCreate(o Options) int {
@@ -201,6 +231,19 @@ func runEdit(o Options) int {
 	return 0
 }
 
+func runList(o Options) int {
+	token := os.Getenv(githubToken)
+	if token == "" && o.Anon {
+		fmt.Printf("Please set ENV variable $%s.\n", githubToken)
+		return 1
+	}
+	gists := getGists(token)
+	for _, gist := range gists {
+		printGist(gist)
+	}
+	return 0
+}
+
 func Main() int {
 	options := Options{}
 	flags := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
@@ -215,6 +258,7 @@ func Main() int {
 	flags.StringVar(&options.Content, "content", "", "specify content of the gist")
 	flags.StringVar(&options.Show, "show", "", "pass a gist ID and it displays a gist.")
 	flags.StringVar(&options.Edit, "edit", "", "pass a gist ID to be able to edit your gist.")
+	flags.BoolVar(&options.List, "list", false, "lists first 30 of your gists.")
 	flags.Parse(os.Args[1:])
 
 	if options.Create {
@@ -225,6 +269,9 @@ func Main() int {
 	}
 	if options.Edit != "" {
 		return runEdit(options)
+	}
+	if options.List {
+		return runList(options)
 	}
 
 	flags.Usage()
