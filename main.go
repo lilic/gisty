@@ -24,14 +24,15 @@ const (
 )
 
 type Options struct {
-	Create  bool
-	Public  bool
-	Anon    bool
-	Desc    string
-	Content string
-	Show    string
-	Edit    string
-	List    bool
+	Create   bool
+	Public   bool
+	Anon     bool
+	Desc     string
+	Content  string
+	Filename string
+	Show     string
+	Edit     string
+	List     bool
 }
 
 type Gist struct {
@@ -127,7 +128,7 @@ func getGists(tkn string) []*Gist {
 
 func printGist(gist *Gist) {
 	colour.Set(colour.FgYellow)
-	fmt.Printf("ID: %s\n", gist.ID)
+	fmt.Printf("ID:  %s\n", gist.ID)
 	colour.Unset()
 	fmt.Print("URL: ")
 	colour.Set(colour.Underline)
@@ -166,10 +167,11 @@ func runCreate(o Options) int {
 	// Create a user gist.
 	token := os.Getenv(githubToken)
 	if token == "" && o.Anon {
-		fmt.Printf("Please set ENV variable $%s.\n", githubToken)
+		fmt.Printf("Please set the ENV variable $%s.\n", githubToken)
 		return 1
 	}
-	g, err := doRequest("POST", o.Anon, token, "", o.Desc, o.Public, "text1.txt", content)
+
+	g, err := doRequest("POST", o.Anon, token, "", o.Desc, o.Public, o.Filename, content)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -273,6 +275,7 @@ func Main() int {
 	flags.BoolVar(&options.Anon, "anon", false, "create an anonymous private gist.")
 	flags.StringVar(&options.Desc, "description", "", "specify gist description, if not provided will be left blank.")
 	flags.StringVar(&options.Content, "content", "", "specify content of the gist")
+	flags.StringVar(&options.Filename, "filename", "file1.txt", "specify name of the file.")
 	flags.StringVar(&options.Show, "show", "", "pass a gist ID and it displays a gist.")
 	flags.StringVar(&options.Edit, "edit", "", "pass a gist ID to be able to edit your gist.")
 	flags.BoolVar(&options.List, "list", false, "lists first 30 of your gists.")
