@@ -50,7 +50,7 @@ type GistFile struct {
 	Content string `json:"content,omitempty"`
 }
 
-func doRequest(method string, anon bool, tkn string, gistID string, desc string, public bool, filename string, content io.Reader) (*Gist, error) {
+func doRequest(method string, anon bool, tkn string, url string, desc string, public bool, filename string, content io.Reader) (*Gist, error) {
 	c, err := ioutil.ReadAll(content)
 	if err != nil {
 		return nil, err
@@ -70,10 +70,7 @@ func doRequest(method string, anon bool, tkn string, gistID string, desc string,
 	if err != nil {
 		return nil, err
 	}
-	url := base
-	if method == "PATCH" {
-		url += "/" + gistID
-	}
+
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		return nil, err
@@ -170,8 +167,7 @@ func runCreate(o Options) int {
 		fmt.Printf("Please set the ENV variable $%s.\n", githubToken)
 		return 1
 	}
-
-	g, err := doRequest("POST", o.Anon, token, "", o.Desc, o.Public, o.Filename, content)
+	g, err := doRequest("POST", o.Anon, token, base, o.Desc, o.Public, o.Filename, content)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -242,7 +238,9 @@ func runEdit(o Options) int {
 	}
 	defer file.Close()
 	c := bufio.NewReader(file)
-	g, err := doRequest("PATCH", false, token, o.Edit, "", gist.Public, filename, c)
+	url := base + "/" + o.Edit
+
+	g, err := doRequest("PATCH", false, token, url, "", gist.Public, filename, c)
 	if err != nil {
 		log.Fatal(err)
 	}
