@@ -50,33 +50,51 @@ type GistFile struct {
 	Content string `json:"content,omitempty"`
 }
 
-func doRequest(method string, anon bool, tkn string, url string, desc string, public bool, filename string, content io.Reader) (*Gist, error) {
-	c, err := ioutil.ReadAll(content)
-	if err != nil {
-		return nil, err
-	}
+type Request struct {
+	method string
+	url    string
+	token  string
+	body   *Gist
+}
 
-	requestBody := &Gist{
-		Public:      public,
-		Description: desc,
-		Files: map[GistFilename]GistFile{
-			GistFilename(filename): GistFile{
-				Content: string(c),
-			},
-		},
+type RequestBody struct {
+	desc     string
+	public   string
+	filename string
+	content  io.Reader
+}
+
+func newRequest(method string, url string) *Request {
+	return &Request{
+		method: method,
+		url:    url,
 	}
+}
+
+func (r *Request) Token(tkn string) *Request {
+	r.token = tkn
+	return r
+}
+
+func (r *Request) Body(g *Gist) *Request {
+	r.body = g
+	return r
+}
+
+func (r *Request) Do() (*Gist, error) {
 	body := bytes.NewBuffer(nil)
-	err = json.NewEncoder(body).Encode(requestBody)
+	if r.body != nil {
+		err := json.NewEncoder(body).Encode(r.body)
+		if err != nil {
+			return nil, err
+		}
+	}
+	req, err := http.NewRequest(r.method, r.url, body)
 	if err != nil {
 		return nil, err
 	}
-
-	req, err := http.NewRequest(method, url, body)
-	if err != nil {
-		return nil, err
-	}
-	if anon == false {
-		req.Header.Add("Authorization", "Token "+tkn)
+	if r.token != "" {
+		req.Header.Add("Authorization", "Token "+r.token)
 	}
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -162,12 +180,27 @@ func runCreate(o Options) int {
 		return 1
 	}
 	// Create a user gist.
-	token := os.Getenv(githubToken)
-	if token == "" && o.Anon {
-		fmt.Printf("Please set the ENV variable $%s.\n", githubToken)
-		return 1
+	token := ""
+	if !o.Anon {
+		token = os.Getenv(githubToken)
+
+		if token == "" {
+			fmt.Printf("Please set the ENV variable $%s.\n", githubToken)
+			return 1
+		}
 	}
-	g, err := doRequest("POST", o.Anon, token, base, o.Desc, o.Public, o.Filename, content)
+
+	c, _ := ioutil.ReadAll(content)
+	requestGist := &Gist{
+		Public:      o.Public,
+		Description: o.Desc,
+		Files: map[GistFilename]GistFile{
+			GistFilename(o.Filename): GistFile{
+				Content: string(c),
+			},
+		},
+	}
+	g, err := newRequest("POST", base).Token(token).Body(requestGist).Do()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -232,15 +265,21 @@ func runEdit(o Options) int {
 		log.Fatal(err)
 	}
 
-	file, err := os.OpenFile(tmpFile.Name(), 0, 0)
+	c, err := ioutil.ReadFile(tmpFile.Name())
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer file.Close()
-	c := bufio.NewReader(file)
 	url := base + "/" + o.Edit
-
-	g, err := doRequest("PATCH", false, token, url, "", gist.Public, filename, c)
+	requestGist := &Gist{
+		Public:      o.Public,
+		Description: "",
+		Files: map[GistFilename]GistFile{
+			GistFilename(filename): GistFile{
+				Content: string(c),
+			},
+		},
+	}
+	g, err := newRequest("PATCH", url).Token(token).Body(requestGist).Do()
 	if err != nil {
 		log.Fatal(err)
 	}
