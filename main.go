@@ -107,23 +107,6 @@ func (r *Request) Do() (*Gist, error) {
 	return &gist, nil
 }
 
-func getGist(id string) *Gist {
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", base+"/"+id, nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Fatal(err)
-		return nil
-	}
-	defer resp.Body.Close()
-	gist := Gist{}
-	json.NewDecoder(resp.Body).Decode(&gist)
-	return &gist
-}
-
 func getGists(tkn string) []*Gist {
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", base, nil)
@@ -209,7 +192,16 @@ func runCreate(o Options) int {
 }
 
 func runShow(o Options) int {
-	gist := getGist(o.Show)
+	token := os.Getenv(githubToken)
+	if token == "" {
+		fmt.Printf("Please set ENV variable $%s.\n", githubToken)
+		return 1
+	}
+	url := base + "/" + o.Show
+	gist, err := newRequest("GET", url).Token(token).Do()
+	if err != nil {
+		log.Fatal(err)
+	}
 	if gist.ID == "" {
 		fmt.Println("Wrong ID.")
 		return 1
@@ -228,10 +220,13 @@ func runEdit(o Options) int {
 	if e == "" {
 		e = "vim"
 	}
-
 	var content []byte
 	var filename string
-	gist := getGist(o.Edit)
+	url := base + "/" + o.Edit
+	gist, err := newRequest("GET", url).Token(token).Do()
+	if err != nil {
+		log.Fatal(err)
+	}
 	if gist.ID == "" {
 		fmt.Println("Wrong gist ID / Non existant gist / No writes to W/R")
 		return 1
@@ -269,7 +264,7 @@ func runEdit(o Options) int {
 	if err != nil {
 		log.Fatal(err)
 	}
-	url := base + "/" + o.Edit
+	url = base + "/" + o.Edit
 	requestGist := &Gist{
 		Public:      o.Public,
 		Description: "",
