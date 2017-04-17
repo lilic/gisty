@@ -57,11 +57,9 @@ type Request struct {
 	body   *Gist
 }
 
-type RequestBody struct {
-	desc     string
-	public   string
-	filename string
-	content  io.Reader
+type Response struct {
+	resp *http.Response
+	err  error
 }
 
 func newRequest(method string, url string) *Request {
@@ -81,17 +79,17 @@ func (r *Request) Body(g *Gist) *Request {
 	return r
 }
 
-func (r *Request) Do() (*Gist, error) {
+func (r *Request) Do() *Response {
 	body := bytes.NewBuffer(nil)
 	if r.body != nil {
 		err := json.NewEncoder(body).Encode(r.body)
 		if err != nil {
-			return nil, err
+			return &Response{resp: nil, err: err}
 		}
 	}
 	req, err := http.NewRequest(r.method, r.url, body)
 	if err != nil {
-		return nil, err
+		return &Response{resp: nil, err: err}
 	}
 	if r.token != "" {
 		req.Header.Add("Authorization", "Token "+r.token)
@@ -99,29 +97,17 @@ func (r *Request) Do() (*Gist, error) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return &Response{resp: nil, err: err}
 	}
-	defer resp.Body.Close()
-	gist := Gist{}
-	json.NewDecoder(resp.Body).Decode(&gist)
-	return &gist, nil
+	return &Response{resp: resp, err: nil}
 }
 
-func getGists(tkn string) []*Gist {
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", base, nil)
-	if err != nil {
-		log.Fatal(err)
+func (r *Response) Handle(input interface{}) error {
+	if r.err != nil {
+		return r.err
 	}
-	req.Header.Add("Authorization", "Token "+tkn)
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer resp.Body.Close()
-	gists := []*Gist{}
-	json.NewDecoder(resp.Body).Decode(&gists)
-	return gists
+	defer r.resp.Body.Close()
+	return json.NewDecoder(r.resp.Body).Decode(input)
 }
 
 func printGist(gist *Gist) {
@@ -183,11 +169,12 @@ func runCreate(o Options) int {
 			},
 		},
 	}
-	g, err := newRequest("POST", base).Token(token).Body(requestGist).Do()
+	gist := &Gist{}
+	err = newRequest("POST", base).Token(token).Body(requestGist).Do().Handle(gist)
 	if err != nil {
 		log.Fatal(err)
 	}
-	printGist(g)
+	printGist(gist)
 	return 0
 }
 
@@ -198,7 +185,8 @@ func runShow(o Options) int {
 		return 1
 	}
 	url := base + "/" + o.Show
-	gist, err := newRequest("GET", url).Token(token).Do()
+	gist := &Gist{}
+	err := newRequest("GET", url).Token(token).Do().Handle(gist)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -223,7 +211,8 @@ func runEdit(o Options) int {
 	var content []byte
 	var filename string
 	url := base + "/" + o.Edit
-	gist, err := newRequest("GET", url).Token(token).Do()
+	gist := Gist{}
+	err := newRequest("GET", url).Token(token).Do().Handle(&gist)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -274,7 +263,8 @@ func runEdit(o Options) int {
 			},
 		},
 	}
-	g, err := newRequest("PATCH", url).Token(token).Body(requestGist).Do()
+	g := &Gist{}
+	err = newRequest("PATCH", url).Token(token).Body(requestGist).Do().Handle(g)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -288,7 +278,11 @@ func runList(o Options) int {
 		fmt.Printf("Please set ENV variable $%s.\n", githubToken)
 		return 1
 	}
-	gists := getGists(token)
+	gists := []*Gist{}
+	err := newRequest("GET", base).Token(token).Do().Handle(&gists)
+	if err != nil {
+		log.Fatal(err)
+	}
 	for _, gist := range gists {
 		printGist(gist)
 	}
