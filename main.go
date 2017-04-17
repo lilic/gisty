@@ -2,25 +2,21 @@ package main
 
 import (
 	"bufio"
-	"bytes"
-	"encoding/json"
 	"fmt"
 	colour "github.com/fatih/color"
+	"github.com/lilic/gisty/gist"
 	flag "github.com/spf13/pflag"
 	"io"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
 	"os/exec"
 	"strings"
-	"time"
 )
 
 const (
 	githubToken = "GITHUB_TOKEN"
 	editor      = "EDITOR"
-	base        = "https://api.github.com/gists"
 )
 
 type Options struct {
@@ -35,82 +31,7 @@ type Options struct {
 	List     bool
 }
 
-type Gist struct {
-	ID          string                    `json:"id,omitempty"`
-	Description string                    `json:"description,omitempty"`
-	Public      bool                      `json:"public,omitempty"`
-	Files       map[GistFilename]GistFile `json:"files,omitempty"`
-	HTMLURL     string                    `json:"html_url,omitempty"`
-	UpdatedAt   time.Time                 `json:"updated_at,omitempty"`
-}
-
-type GistFilename string
-
-type GistFile struct {
-	Content string `json:"content,omitempty"`
-}
-
-type Request struct {
-	method string
-	url    string
-	token  string
-	body   *Gist
-}
-
-type Response struct {
-	resp *http.Response
-	err  error
-}
-
-func newRequest(method string, url string) *Request {
-	return &Request{
-		method: method,
-		url:    url,
-	}
-}
-
-func (r *Request) Token(tkn string) *Request {
-	r.token = tkn
-	return r
-}
-
-func (r *Request) Body(g *Gist) *Request {
-	r.body = g
-	return r
-}
-
-func (r *Request) Do() *Response {
-	body := bytes.NewBuffer(nil)
-	if r.body != nil {
-		err := json.NewEncoder(body).Encode(r.body)
-		if err != nil {
-			return &Response{resp: nil, err: err}
-		}
-	}
-	req, err := http.NewRequest(r.method, r.url, body)
-	if err != nil {
-		return &Response{resp: nil, err: err}
-	}
-	if r.token != "" {
-		req.Header.Add("Authorization", "Token "+r.token)
-	}
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return &Response{resp: nil, err: err}
-	}
-	return &Response{resp: resp, err: nil}
-}
-
-func (r *Response) Handle(input interface{}) error {
-	if r.err != nil {
-		return r.err
-	}
-	defer r.resp.Body.Close()
-	return json.NewDecoder(r.resp.Body).Decode(input)
-}
-
-func printGist(gist *Gist) {
+func printGist(gist *gist.Gist) {
 	colour.Set(colour.FgYellow)
 	fmt.Printf("ID:  %s\n", gist.ID)
 	colour.Unset()
@@ -160,17 +81,16 @@ func runCreate(o Options) int {
 	}
 
 	c, _ := ioutil.ReadAll(content)
-	requestGist := &Gist{
+	requestGist := &gist.Gist{
 		Public:      o.Public,
 		Description: o.Desc,
-		Files: map[GistFilename]GistFile{
-			GistFilename(o.Filename): GistFile{
+		Files: map[gist.GistFilename]gist.GistFile{
+			gist.GistFilename(o.Filename): gist.GistFile{
 				Content: string(c),
 			},
 		},
 	}
-	gist := &Gist{}
-	err = newRequest("POST", base).Token(token).Body(requestGist).Do().Handle(gist)
+	gist, err := gist.Create(token, requestGist)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -184,9 +104,7 @@ func runShow(o Options) int {
 		fmt.Printf("Please set ENV variable $%s.\n", githubToken)
 		return 1
 	}
-	url := base + "/" + o.Show
-	gist := &Gist{}
-	err := newRequest("GET", url).Token(token).Do().Handle(gist)
+	gist, err := gist.Show(token, o.Show)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -210,17 +128,15 @@ func runEdit(o Options) int {
 	}
 	var content []byte
 	var filename string
-	url := base + "/" + o.Edit
-	gist := Gist{}
-	err := newRequest("GET", url).Token(token).Do().Handle(&gist)
+	g, err := gist.Show(token, o.Edit)
 	if err != nil {
 		log.Fatal(err)
 	}
-	if gist.ID == "" {
+	if g.ID == "" {
 		fmt.Println("Wrong gist ID / Non existant gist / No writes to W/R")
 		return 1
 	}
-	for f, gf := range gist.Files {
+	for f, gf := range g.Files {
 		content = []byte(gf.Content)
 		filename = string(f)
 	}
@@ -253,18 +169,16 @@ func runEdit(o Options) int {
 	if err != nil {
 		log.Fatal(err)
 	}
-	url = base + "/" + o.Edit
-	requestGist := &Gist{
+	requestGist := &gist.Gist{
 		Public:      o.Public,
 		Description: "",
-		Files: map[GistFilename]GistFile{
-			GistFilename(filename): GistFile{
+		Files: map[gist.GistFilename]gist.GistFile{
+			gist.GistFilename(filename): gist.GistFile{
 				Content: string(c),
 			},
 		},
 	}
-	g := &Gist{}
-	err = newRequest("PATCH", url).Token(token).Body(requestGist).Do().Handle(g)
+	g, err = gist.Update(token, o.Edit, requestGist)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -278,13 +192,12 @@ func runList(o Options) int {
 		fmt.Printf("Please set ENV variable $%s.\n", githubToken)
 		return 1
 	}
-	gists := []*Gist{}
-	err := newRequest("GET", base).Token(token).Do().Handle(&gists)
+	gists, err := gist.List(token)
 	if err != nil {
 		log.Fatal(err)
 	}
-	for _, gist := range gists {
-		printGist(gist)
+	for _, g := range gists {
+		printGist(g)
 	}
 	return 0
 }
