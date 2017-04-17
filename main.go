@@ -31,19 +31,19 @@ type Options struct {
 	List     bool
 }
 
-func printGist(gist *gist.Gist) {
+func printGist(g *gist.Gist) {
 	colour.Set(colour.FgYellow)
-	fmt.Printf("ID:  %s\n", gist.ID)
+	fmt.Printf("ID:  %s\n", g.ID)
 	colour.Unset()
 	fmt.Print("URL: ")
 	colour.Set(colour.Underline)
-	fmt.Println(gist.HTMLURL)
+	fmt.Println(g.HTMLURL)
 	colour.Unset()
-	fmt.Printf("Date: %s\n\n", gist.UpdatedAt)
-	if gist.Description != "" {
-		fmt.Println(gist.Description)
+	fmt.Printf("Date: %s\n\n", g.UpdatedAt)
+	if g.Description != "" {
+		fmt.Println(g.Description)
 	}
-	for filename, _ := range gist.Files {
+	for filename, _ := range g.Files {
 		fmt.Println(filename)
 	}
 	fmt.Println()
@@ -66,7 +66,7 @@ func runCreate(o Options) int {
 		content = strings.NewReader(o.Content)
 	}
 	if content == nil {
-		fmt.Println("Please set your content.")
+		fmt.Println("Content missing.")
 		return 1
 	}
 	// Create a user gist.
@@ -75,7 +75,7 @@ func runCreate(o Options) int {
 		token = os.Getenv(githubToken)
 
 		if token == "" {
-			fmt.Printf("Please set the ENV variable $%s.\n", githubToken)
+			fmt.Printf("Authentication not possible. ENV variable $%s is not set.\n", githubToken)
 			return 1
 		}
 	}
@@ -90,36 +90,36 @@ func runCreate(o Options) int {
 			},
 		},
 	}
-	gist, err := gist.Create(token, requestGist)
+	g, err := gist.Create(token, requestGist)
 	if err != nil {
 		log.Fatal(err)
 	}
-	printGist(gist)
+	printGist(g)
 	return 0
 }
 
 func runShow(o Options) int {
 	token := os.Getenv(githubToken)
 	if token == "" {
-		fmt.Printf("Please set ENV variable $%s.\n", githubToken)
+		fmt.Printf("Authentication not possible. ENV variable $%s is not set.\n", githubToken)
 		return 1
 	}
-	gist, err := gist.Show(token, o.Show)
+	g, err := gist.Show(token, o.Show)
 	if err != nil {
 		log.Fatal(err)
 	}
-	if gist.ID == "" {
-		fmt.Println("Wrong ID.")
+	if g.ID == "" {
+		fmt.Printf("Cannot find gist for ID: %s.\n", g.ID)
 		return 1
 	}
-	printGist(gist)
+	printGist(g)
 	return 0
 }
 
 func runEdit(o Options) int {
 	token := os.Getenv(githubToken)
 	if token == "" {
-		fmt.Printf("Please set ENV variable $%s.\n", githubToken)
+		fmt.Printf("Authentication not possible. ENV variable $%s is not set.\n", githubToken)
 		return 1
 	}
 	e := os.Getenv(editor)
@@ -133,7 +133,7 @@ func runEdit(o Options) int {
 		log.Fatal(err)
 	}
 	if g.ID == "" {
-		fmt.Println("Wrong gist ID / Non existant gist / No writes to W/R")
+		fmt.Printf("Cannot find gist for ID: %s.\n", o.Edit)
 		return 1
 	}
 	for f, gf := range g.Files {
@@ -189,7 +189,7 @@ func runEdit(o Options) int {
 func runList(o Options) int {
 	token := os.Getenv(githubToken)
 	if token == "" && o.Anon {
-		fmt.Printf("Please set ENV variable $%s.\n", githubToken)
+		fmt.Printf("Authentication not possible. ENV variable $%s is not set.\n", githubToken)
 		return 1
 	}
 	gists, err := gist.List(token)
