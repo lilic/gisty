@@ -57,7 +57,7 @@ func runCreate(o Options) int {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if ((info.Mode() & os.ModeCharDevice) != os.ModeCharDevice) && info.Size() > 0 {
+	if len(o.Content) == 0 && !(info.Mode()&os.ModeNamedPipe == 0) {
 		content = bufio.NewReader(os.Stdin)
 	}
 
