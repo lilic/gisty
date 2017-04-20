@@ -188,7 +188,7 @@ func runEdit(o Options) int {
 
 func runList(o Options) int {
 	token := os.Getenv(githubToken)
-	if token == "" && o.Anon {
+	if token == "" {
 		fmt.Printf("Authentication not possible. ENV variable $%s is not set.\n", githubToken)
 		return 1
 	}
